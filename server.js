@@ -3,23 +3,71 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import path from "path";
-import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+import { MongoClient, ServerApiVersion } from "mongodb"; // Importar MongoClient
+
+dotenv.config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// --- Configuração do MongoDB Atlas ---
+const uri = process.env.MONGODB_URI; // Usar variável de ambiente para a URI
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
 
-const API_KEY = "AIzaSyAXkyX793mDPtGVT10ur0Zy-vN2zyKVBPk"; // Sua chave real
+async function connectToMongoDB() {
+  try {
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log("LOG: Conectado ao MongoDB Atlas com sucesso!");
+  } catch (error) {
+    console.error("LOG: Erro ao conectar ao MongoDB Atlas:", error);
+    // Opcional: process.exit(1); se a conexão com o DB for crítica para a inicialização
+  }
+}
 
-let genAI; // Declaração ÚNICA
+connectToMongoDB(); // Chamar a função para conectar ao iniciar o servidor
+
+// --- Função para registrar logs no MongoDB ---
+async function logUserAccess(ip, botName, action) {
+  try {
+    const database = client.db("IIW2023A_Logs"); // Nome do banco de dados fornecido
+    const logsCollection = database.collection("tb_cl_user_log_acess"); // Nome da coleção fornecido
+
+    const now = new Date();
+    const col_data = now.toISOString().split("T")[0]; // Formato YYYY-MM-DD
+    const col_hora = now.toTimeString().split(" ")[0]; // Formato HH:MM:SS
+
+    const logEntry = {
+      col_data: col_data,
+      col_hora: col_hora,
+      col_IP: ip,
+      col_nome_bot: botName,
+      col_acao: action,
+      timestamp: now // Adicionar timestamp para ordenação e referência
+    };
+
+    const result = await logsCollection.insertOne(logEntry);
+    console.log(`LOG: Log de acesso registrado: ${result.insertedId}`);
+  } catch (error) {
+    console.error("LOG: Erro ao registrar log no MongoDB:", error);
+  }
+}
+
+const API_KEY = process.env.GEMINI_API_KEY;
+
+let genAI;
 
 try {
   if (!API_KEY || API_KEY.trim() === "") {
-    console.error("ERRO CRÍTICO: A variável API_KEY está vazia ou não foi definida corretamente em server.js.");
-    console.error("Por favor, certifique-se de que sua chave real do Google AI Studio está na variável API_KEY.");
+    console.error("ERRO CRÍTICO: A variável GEMINI_API_KEY está vazia ou não foi definida corretamente.");
+    console.error("Por favor, certifique-se de que sua chave real do Google AI Studio está na variável de ambiente GEMINI_API_KEY.");
     process.exit(1);
   }
   genAI = new GoogleGenerativeAI(API_KEY);
@@ -34,7 +82,7 @@ try {
 // --- Definição da Ferramenta ---
 const getCurrentTimeTool = {
   name: "getCurrentTime",
-  description: "Obtém a data e hora atuais do sistema. Retorna um objeto com uma propriedade 'currentTime' que é uma string representando a data e hora formatada (ex: '17/04/2024, 14:30:55').",
+  description: "Obtém a data e hora atuais do sistema. Retorna um objeto com uma propriedade \'currentTime\' que é uma string representando a data e hora formatada (ex: \'17/04/2024, 14:30:55\').",
   parameters: {
     type: "object",
     properties: {},
@@ -48,7 +96,7 @@ const tools = [{ functionDeclarations: [getCurrentTimeTool] }];
 function getCurrentTime() {
   console.log("LOG: Executando getCurrentTime (Node.js)");
   const now = new Date();
-  const dateTimeString = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour12: false })}`;
+  const dateTimeString = `${now.toLocaleDateString("pt-BR")} ${now.toLocaleTimeString("pt-BR", { hour12: false })}`;
   const resultObject = { currentTime: dateTimeString };
   console.log("LOG: Resultado da função getCurrentTime:", JSON.stringify(resultObject));
   return resultObject;
@@ -82,7 +130,7 @@ const safetySettings = [
 const model = genAI.getGenerativeModel({
   model: "gemini-1.5-flash-latest",
   tools: tools,
-  safetySettings: safetySettings // Usando as configurações de segurança definidas
+  safetySettings: safetySettings
 });
 
 // --- Middleware Básico ---
@@ -94,6 +142,12 @@ app.post("/chat", async (req, res) => {
   console.log("LOG: Rota /chat POST");
   const userMessage = req.body.mensagem;
   let history = req.body.historico || [];
+
+  // Obter o IP do cliente (considerando Render.com ou proxies)
+  const clientIp = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+
+  // Registrar log de acesso ao chatbot
+  await logUserAccess(clientIp, "Chatbot Mariah", "acessou_chatbot");
 
   console.log("LOG: Mensagem User:", userMessage);
 
@@ -118,6 +172,9 @@ app.post("/chat", async (req, res) => {
         console.log(`LOG: Argumentos para ${functionCall.name}:`, JSON.stringify(functionArgs));
         const functionResult = functionToCall(functionArgs);
         console.log(`LOG: Resultado de ${functionCall.name} (JS):`, JSON.stringify(functionResult));
+
+        // Registrar log de uso de ferramenta
+        await logUserAccess(clientIp, "Chatbot Mariah", `usou_ferramenta_${functionCall.name}`);
 
         result = await chat.sendMessage([{
           functionResponse: {
@@ -144,32 +201,30 @@ app.post("/chat", async (req, res) => {
     }
 
     console.log("LOG: Resposta final do Bot (texto):", botResponseText);
-    const currentHistory = await chat.getHistory(); // Movido para cá para garantir que é o histórico mais recente
+    const currentHistory = await chat.getHistory();
     res.json({ resposta: botResponseText, historico: currentHistory });
 
   } catch (error) {
-    console.error("LOG: Erro GERAL na rota /chat:", error.message); // Loga a mensagem de erro
-    console.error("LOG: StackTrace do erro:", error.stack); // Loga o stack trace completo
+    console.error("LOG: Erro GERAL na rota /chat:", error.message);
+    console.error("LOG: StackTrace do erro:", error.stack);
     let errorMessage = "Erro ao comunicar com o chatbot.";
     res.status(500).json({ erro: errorMessage, details: error.message || error.toString() });
   }
 });
 
-app.get('/favicon.ico', (req, res) => res.status(204).end());
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// Rota de fallback para 404 - Apenas para APIs, não para servir HTML
 app.use((req, res, next) => {
     console.log(`LOG: Rota não encontrada - 404: ${req.method} ${req.originalUrl}`);
     if (!res.headersSent) {
-      if (req.accepts('json') && !req.accepts('html')) {
+      if (req.accepts("json") && !req.accepts("html")) {
         res.status(404).json({ error: "Recurso não encontrado" });
       } else {
         res.status(404).send("<h1>404 - Página não encontrada</h1>");
       }
     }
 });
+
 app.listen(port, () => {
-  console.log(`Servidor rodando em http://localhost:${port}`);
-  console.log(`Para testar, abra: http://localhost:${port}/`);
-  console.log(`Certifique-se que seus arquivos HTML e client.js estão na pasta 'public'.`);
+  console.log(`Servidor rodando em http://localhost:${port}` );
+  console.log(`Servidor backend pronto para receber requisições.`);
 });
