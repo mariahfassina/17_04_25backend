@@ -9,7 +9,7 @@ import { MongoClient, ServerApiVersion } from "mongodb"; // Importar MongoClient
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000; // Usar a porta do ambiente ou 3000
 
 // --- Configuração do MongoDB Atlas ---
 const uri = process.env.MONGODB_URI; // Usar variável de ambiente para a URI
@@ -37,6 +37,7 @@ connectToMongoDB(); // Chamar a função para conectar ao iniciar o servidor
 // --- Função para registrar logs no MongoDB ---
 async function logUserAccess(ip, botName, action) {
   try {
+    console.log("LOG: Tentando registrar log...");
     const database = client.db("IIW2023A_Logs"); // Nome do banco de dados fornecido
     const logsCollection = database.collection("tb_cl_user_log_acess"); // Nome da coleção fornecido
 
@@ -53,8 +54,9 @@ async function logUserAccess(ip, botName, action) {
       timestamp: now // Adicionar timestamp para ordenação e referência
     };
 
+    console.log("LOG: Objeto de log a ser inserido:", JSON.stringify(logEntry));
     const result = await logsCollection.insertOne(logEntry);
-    console.log(`LOG: Log de acesso registrado: ${result.insertedId}`);
+    console.log(`LOG: Log de acesso registrado com ID: ${result.insertedId}`);
   } catch (error) {
     console.error("LOG: Erro ao registrar log no MongoDB:", error);
   }
