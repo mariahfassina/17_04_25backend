@@ -3,7 +3,9 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import dotenv from "dotenv";
+import * as dotenv from "dotenv"; // Importar dotenv como um namespace
+
+dotenv.config(); // Carregar variáveis de ambiente do .env
 import { MongoClient, ServerApiVersion } from "mongodb"; // Importar MongoClient
 
 dotenv.config();
