@@ -8,7 +8,8 @@ require('dotenv').config();
 // 2. CONFIGURAÇÃO INICIAL
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // Permite ler JSON
+app.use(express.urlencoded({ extended: true })); // Garante a leitura de outros tipos de corpo de requisição
 
 // 3. CONFIGURAÇÃO DO GOOGLE GEMINI
 // Pega a chave da API do Gemini do ambiente (que você configurará no Render)
