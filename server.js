@@ -1,7 +1,6 @@
 // 1. IMPORTAÇÕES NECESSÁRIAS
 const express = require('express');
 const cors = require('cors');
-// Importa a biblioteca do Google Gemini
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
@@ -12,20 +11,26 @@ app.use(express.json()); // Permite ler JSON
 app.use(express.urlencoded({ extended: true })); // Garante a leitura de outros tipos de corpo de requisição
 
 // 3. CONFIGURAÇÃO DO GOOGLE GEMINI
-// Pega a chave da API do Gemini do ambiente (que você configurará no Render)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // 4. ROTA PRINCIPAL PARA O CHAT
 app.post('/chat', async (req, res) => {
+    // ===================================================================
+    // NOSSO ESPIÃO NO BACKEND!
+    // Esta linha vai mostrar nos logs do Render o que o servidor recebeu.
+    console.log('Recebido no backend - Corpo da requisição:', req.body);
+    // ===================================================================
+
     try {
-        // Pega a mensagem do frontend
+        // Pega a mensagem do corpo da requisição
         const { message } = req.body;
 
+        // Validação que causa o erro 400
         if (!message) {
-            return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
+            return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida. O corpo da requisição pode estar vazio ou mal formatado.' });
         }
 
-        // Inicializa o modelo do Gemini (gemini-pro é um ótimo modelo de texto)
+        // Inicializa o modelo do Gemini
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
         // Gera o conteúdo com base na mensagem do usuário
