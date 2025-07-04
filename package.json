@@ -1,18 +1,21 @@
 {
-  "name": "flashcard-gemini",
+  "name": "17-04-25-backend",
   "version": "1.0.0",
-  "description": "Gerador de flashcards educativos com API Gemini",
+  "description": "Backend para o chatbot com Google Gemini",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
-  "keywords": [],
-  "author": "",
+  "author": "Mariah Fassina",
   "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.24.0",
-    "body-parser": "^1.20.3",
+    "@google/generative-ai": "^0.15.0",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
   }
 }
