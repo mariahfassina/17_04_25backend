@@ -22,6 +22,8 @@ if (!BUNDLE_URL_FRONTEND) {
 // Adiciona as origens permitidas (localhost + URL do bundle)
 const allowedOrigins = [
     'http://localhost:3000',
+    'https://chatbotflashcards.vercel.app',
+    'https://chatbotflashcards.vercel.app/',
     BUNDLE_URL_FRONTEND
 ];
 
@@ -145,3 +147,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
+
