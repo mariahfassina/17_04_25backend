@@ -19,6 +19,12 @@ if (!BUNDLE_URL_FRONTEND) {
     BUNDLE_URL_FRONTEND = 'https://chatbotflashcards.vercel.app';
 }
 
+// Adiciona as origens permitidas (localhost + URL do bundle)
+const allowedOrigins = [
+    'http://localhost:3000',
+    BUNDLE_URL_FRONTEND
+];
+
 if (!GEMINI_API_KEY) {
     console.error("ERRO FATAL: Variável de ambiente GEMINI_API_KEY não foi definida!");
     process.exit(1); // Para o servidor imediatamente
@@ -35,7 +41,13 @@ if (!MONGO_URI_HISTORY) {
 // 3. CONFIGURAÇÃO INICIAL
 const app = express();
 const corsOptions = {
-    origin: BUNDLE_URL_FRONTEND,
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Origem não permitida pelo CORS'));
+        }
+    },
     optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
