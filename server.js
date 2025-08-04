@@ -158,9 +158,6 @@ app.get('/api/chat/history', async (req, res) => {
         if (client) await client.close();
     }
 });
-
-// 5. INICIALIZAÇÃO DO SERVIDOR
-const PORT = process.env.PORT || 3000;
 // ROTA PARA TESTAR SE VARIÁVEIS DE AMBIENTE ESTÃO OK
 app.get('/api/test-env', (req, res) => {
     res.json({
@@ -171,7 +168,11 @@ app.get('/api/test-env', (req, res) => {
     });
 });
 
+// 5. INICIALIZAÇÃO DO SERVIDOR
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
+
 
