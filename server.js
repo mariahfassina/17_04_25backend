@@ -42,8 +42,10 @@ if (!MONGO_URI_HISTORY) {
 
 // 3. CONFIGURAÇÃO INICIAL
 const app = express();
+
 const corsOptions = {
     origin: function (origin, callback) {
+        // Permite chamadas sem origin (ex: Postman, backend)
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
@@ -52,6 +54,7 @@ const corsOptions = {
     },
     optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -147,4 +150,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
-
