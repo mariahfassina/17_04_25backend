@@ -161,6 +161,17 @@ app.get('/api/chat/history', async (req, res) => {
 
 // 5. INICIALIZAÇÃO DO SERVIDOR
 const PORT = process.env.PORT || 3000;
+// ROTA PARA TESTAR SE VARIÁVEIS DE AMBIENTE ESTÃO OK
+app.get('/api/test-env', (req, res) => {
+    res.json({
+        GEMINI_API_KEY: GEMINI_API_KEY ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
+        MONGO_URI_LOGS: MONGO_URI_LOGS ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
+        MONGO_URI_HISTORY: MONGO_URI_HISTORY ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
+        BUNDLE_URL_FRONTEND: BUNDLE_URL_FRONTEND || '❌ NÃO DEFINIDA'
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
+
