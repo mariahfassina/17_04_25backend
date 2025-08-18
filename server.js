@@ -158,6 +158,106 @@ app.get('/api/chat/history', async (req, res) => {
         if (client) await client.close();
     }
 });
+
+// ROTA PARA EXCLUIR HISTÓRICO
+app.delete('/api/chat/historicos/:id', async (req, res) => {
+    const { id } = req.params;
+    const client = new MongoClient(MONGO_URI_HISTORY);
+    try {
+        await client.connect();
+        const db = client.db("MeuChatbotHistory");
+        const collection = db.collection("chat_histories");
+        const { ObjectId } = require('mongodb');
+        const result = await collection.findOneAndDelete({ _id: new ObjectId(id) });
+        if (!result.value) {
+            return res.status(404).json({ error: "Histórico não encontrado." });
+        }
+        res.status(200).json({ message: "Histórico excluído com sucesso." });
+    } catch (error) {
+        console.error("Erro ao excluir histórico:", error);
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+        res.status(500).json({ error: "Erro ao excluir histórico." });
+    } finally {
+        if (client) await client.close();
+    }
+});
+
+// ROTA PARA GERAR TÍTULO INTELIGENTE
+app.post('/api/chat/historicos/:id/gerar-titulo', async (req, res) => {
+    const { id } = req.params;
+    const client = new MongoClient(MONGO_URI_HISTORY);
+    try {
+        await client.connect();
+        const db = client.db("MeuChatbotHistory");
+        const collection = db.collection("chat_histories");
+        const { ObjectId } = require('mongodb');
+        const historico = await collection.findOne({ _id: new ObjectId(id) });
+        
+        if (!historico) {
+            return res.status(404).json({ error: "Histórico não encontrado." });
+        }
+
+        // Formatar o histórico para o Gemini
+        const conversaFormatada = historico.conversation.map(msg => 
+            `${msg.role === 'user' ? 'Usuário' : 'Bot'}: ${msg.text}`
+        ).join('\n');
+
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const prompt = `Baseado nesta conversa, sugira um título curto e conciso de no máximo 5 palavras:\n\n${conversaFormatada}`;
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const tituloSugerido = response.text().trim();
+
+        res.status(200).json({ titulo: tituloSugerido });
+    } catch (error) {
+        console.error("Erro ao gerar título:", error);
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+        res.status(500).json({ error: "Erro ao gerar título." });
+    } finally {
+        if (client) await client.close();
+    }
+});
+
+// ROTA PARA SALVAR TÍTULO
+app.put('/api/chat/historicos/:id', async (req, res) => {
+    const { id } = req.params;
+    const { titulo } = req.body;
+    
+    if (!titulo || titulo.trim() === '') {
+        return res.status(400).json({ error: "Título é obrigatório." });
+    }
+
+    const client = new MongoClient(MONGO_URI_HISTORY);
+    try {
+        await client.connect();
+        const db = client.db("MeuChatbotHistory");
+        const collection = db.collection("chat_histories");
+        const { ObjectId } = require('mongodb');
+        const result = await collection.findOneAndUpdate(
+            { _id: new ObjectId(id) },
+            { $set: { titulo: titulo.trim() } },
+            { returnDocument: 'after' }
+        );
+        
+        if (!result.value) {
+            return res.status(404).json({ error: "Histórico não encontrado." });
+        }
+        
+        res.status(200).json(result.value);
+    } catch (error) {
+        console.error("Erro ao salvar título:", error);
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+        res.status(500).json({ error: "Erro ao salvar título." });
+    } finally {
+        if (client) await client.close();
+    }
+});
 // ROTA PARA TESTAR SE VARIÁVEIS DE AMBIENTE ESTÃO OK
 app.get('/api/test-env', (req, res) => {
     res.json({
