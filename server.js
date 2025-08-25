@@ -62,26 +62,44 @@ let dadosRankingVitrine = [];
 // 4. ROTAS DA API
 // ===================================================================
 
-// ROTA PRINCIPAL DO CHAT (MODIFICADA PARA O FLUXO DE DUAS ETAPAS)
+// ROTA PRINCIPAL DO CHAT (COM PROMPT CORRIGIDO E MAIS RÍGIDO)
 app.post('/chat', async (req, res) => {
     try {
-        const { message, history } = req.body; // Agora recebemos o histórico também
+        const { message, history } = req.body;
         if (!message) {
             return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
         }
 
-        // ** NOVO PROMPT DE SISTEMA, MAIS INTELIGENTE **
+        // ** PROMPT DE SISTEMA CORRIGIDO E MAIS RÍGIDO **
         const promptDeSistema = `
-            Você é um assistente de estudos que cria flash cards em um fluxo de duas etapas.
+            Você é um assistente de estudos que cria flash cards. Siga estas regras ESTRITAMENTE.
 
-            1.  **PRIMEIRA ETAPA (GERAR PERGUNTA):** Quando um usuário pede um tema (ex: "fale sobre o sistema solar"), sua ÚNICA resposta deve ser a PERGUNTA do flash card. Formate-a assim: "❓ [PERGUNTA COM EMOJIS RELEVANTES]". NUNCA inclua a resposta nesta etapa.
+            REGRA 1: Se a última mensagem do usuário NÃO for "resposta" (ou sinônimos), sua única ação é criar uma PERGUNTA.
+            - Formato OBRIGATÓRIO: "❓ [PERGUNTA COM EMOJIS RELEVANTES]"
+            - É PROIBIDO incluir a palavra "Resposta" ou o conteúdo da resposta nesta etapa. APENAS a pergunta.
 
-            2.  **SEGUNDA ETAPA (GERAR RESPOSTA):** Quando o usuário digitar "resposta" (ou algo similar), você deve fornecer a resposta para a ÚLTIMA pergunta que você fez. Use o histórico da conversa para saber qual foi a última pergunta. Formate a resposta assim: "✅ [RESPOSTA DIRETA E CLARA]".
+            REGRA 2: Se a última mensagem do usuário for "resposta" (ou sinônimos como "mostre a resposta", "qual a resposta"), sua única ação é revelar a resposta da pergunta anterior.
+            - Use o histórico da conversa para saber qual foi a última pergunta.
+            - Formato OBRIGATÓRIO: "✅ [RESPOSTA DIRETA E CLARA]"
 
-            3.  **CONTINUAÇÃO:** Se o usuário disser "próximo", "outro", ou pedir um novo tema, inicie a PRIMEIRA ETAPA novamente com um novo flash card.
+            REGRA 3: Se o usuário pedir um novo tema, ou disser "próximo", siga a REGRA 1.
 
-            -   Seja criativo com os emojis e certifique-se de que eles combinam com o tema da pergunta.
-            -   Analise o histórico da conversa que o usuário enviará para entender em qual etapa você está.
+            Exemplo de fluxo perfeito:
+            Histórico: [
+                {role: "user", parts: [{text: "Olá"}]},
+                {role: "model", parts: [{text: "Olá! Sobre qual tema você quer um flash card?"}]}
+            ]
+            Última Mensagem do Usuário: "Sistema Solar"
+            Sua Resposta (seguindo REGRA 1): "❓ Qual é o maior planeta do Sistema Solar? 🪐"
+
+            ---
+
+            Histórico: [
+                {role: "user", parts: [{text: "Sistema Solar"}]},
+                {role: "model", parts: [{text: "❓ Qual é o maior planeta do Sistema Solar? 🪐"}]}
+            ]
+            Última Mensagem do Usuário: "resposta"
+            Sua Resposta (seguindo REGRA 2): "✅ Júpiter."
         `;
 
         const model = genAI.getGenerativeModel({ 
@@ -89,7 +107,6 @@ app.post('/chat', async (req, res) => {
             systemInstruction: promptDeSistema,
         });
 
-        // Inicia o chat com o histórico para dar contexto ao Gemini
         const chat = model.startChat({
             history: history || [],
         });
@@ -276,7 +293,7 @@ app.put('/api/chat/historicos/:id', async (req, res) => {
         }
         
         res.status(200).json(result.value);
-    } catch (error) {
+    } catch (error)
         console.error("Erro ao salvar título:", error);
         if (error.name === 'CastError') {
             return res.status(400).json({ error: "ID inválido." });
