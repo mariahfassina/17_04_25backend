@@ -15,11 +15,11 @@ let BUNDLE_URL_FRONTEND = process.env.BUNDLE_URL_FRONTEND;
 
 // Define a URL do frontend padrão se não estiver nas variáveis de ambiente
 if (!BUNDLE_URL_FRONTEND) {
-    console.log("AVISO: BUNDLE_URL_FRONTEND não definida. Usando valor padrão: https://chatbotflashcards.vercel.app");
+    console.log("AVISO: BUNDLE_URL_FRONTEND não definida. Usando valor padrão: https://chatbotflashcards.vercel.app" );
     BUNDLE_URL_FRONTEND = 'https://chatbotflashcards.vercel.app';
 }
 
-// Adiciona as origens permitidas (localhost + URL do bundle)
+// Adiciona as origens permitidas (localhost + URL do bundle )
 const allowedOrigins = [
     'http://localhost:3000',
     'https://chatbotflashcards.vercel.app',
@@ -27,7 +27,7 @@ const allowedOrigins = [
     BUNDLE_URL_FRONTEND
 ];
 
-if (!GEMINI_API_KEY) {
+if (!GEMINI_API_KEY ) {
     console.error("ERRO FATAL: Variável de ambiente GEMINI_API_KEY não foi definida!");
     process.exit(1); // Para o servidor imediatamente
 }
@@ -44,7 +44,8 @@ if (!MONGO_URI_HISTORY) {
 const app = express();
 const corsOptions = {
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Permite requisições sem 'origin' (ex: Postman, apps mobile) ou da lista de permitidos
+        if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
             callback(null, true);
         } else {
             callback(new Error('Origem não permitida pelo CORS'));
@@ -62,22 +63,51 @@ let dadosRankingVitrine = [];
 // 4. ROTAS DA API
 // ===================================================================
 
-// ROTA PRINCIPAL DO CHAT
+// ROTA PRINCIPAL DO CHAT (MODIFICADA PARA SER UM ESPECIALISTA EM FLASH CARDS)
 app.post('/chat', async (req, res) => {
     try {
         const { message } = req.body;
-        if (!message) return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
+        if (!message) {
+            return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
+        }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        // ** AQUI ESTÁ A MUDANÇA **
+        // Instruímos o Gemini sobre sua personalidade e tarefa.
+        const promptDeSistema = `
+            Você é um assistente de estudos especializado em criar flash cards. 
+            Sua tarefa é transformar a solicitação do usuário em um flash card claro e conciso.
+            Responda sempre no seguinte formato:
+
+            **Pergunta:** [Aqui vai a pergunta direta sobre o tema]
+            **Resposta:** [Aqui vai a resposta direta e objetiva]
+
+            Se o usuário pedir para sair, mudar de tema ou apenas conversar, responda de forma amigável e útil, mas sempre se mantenha no personagem de um assistente de estudos.
+            Se o usuário disser "próximo", gere um novo flash card sobre o mesmo tema da última pergunta.
+            Se o usuário disser "resposta", apenas mostre a resposta do flash card anterior.
+            Exemplo de interação:
+            Usuário: "Revolução Francesa"
+            Você: 
+            **Pergunta:** Qual foi o principal evento que marcou o início da Revolução Francesa?
+            **Resposta:** A Queda da Bastilha em 14 de julho de 1789.
+        `;
+
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash-latest",
+            systemInstruction: promptDeSistema, // Aplicando a personalidade
+        });
+
         const result = await model.generateContent(message);
         const response = await result.response;
         const text = response.text();
+        
         res.json({ response: text });
+
     } catch (error) {
         console.error('Erro na rota /chat:', error);
         res.status(500).json({ error: 'Ocorreu um erro no servidor ao processar sua mensagem.' });
     }
 });
+
 
 // ROTA PARA SALVAR LOG DE ACESSO
 app.post('/api/log-acesso', async (req, res) => {
@@ -274,5 +304,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
-
-
