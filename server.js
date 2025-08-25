@@ -70,7 +70,6 @@ app.post('/chat', async (req, res) => {
             return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
         }
 
-        // ** PROMPT DE SISTEMA CORRIGIDO E MAIS RÍGIDO **
         const promptDeSistema = `
             Você é um assistente de estudos que cria flash cards. Siga estas regras ESTRITAMENTE.
 
@@ -244,7 +243,6 @@ app.post('/api/chat/historicos/:id/gerar-titulo', async (req, res) => {
             return res.status(404).json({ error: "Histórico não encontrado." });
         }
 
-        // Formatar o histórico para o Gemini
         const conversaFormatada = historico.conversation.map(msg => 
             `${msg.role === 'user' ? 'Usuário' : 'Bot'}: ${msg.text}`
         ).join('\n');
@@ -293,7 +291,7 @@ app.put('/api/chat/historicos/:id', async (req, res) => {
         }
         
         res.status(200).json(result.value);
-    } catch (error)
+    } catch (error) { // ** A CHAVE QUE FALTAVA FOI ADICIONADA AQUI **
         console.error("Erro ao salvar título:", error);
         if (error.name === 'CastError') {
             return res.status(400).json({ error: "ID inválido." });
@@ -303,6 +301,7 @@ app.put('/api/chat/historicos/:id', async (req, res) => {
         if (client) await client.close();
     }
 });
+
 // ROTA PARA TESTAR SE VARIÁVEIS DE AMBIENTE ESTÃO OK
 app.get('/api/test-env', (req, res) => {
     res.json({
