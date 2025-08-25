@@ -44,7 +44,6 @@ if (!MONGO_URI_HISTORY) {
 const app = express();
 const corsOptions = {
     origin: function (origin, callback) {
-        // Permite requisições sem 'origin' (ex: Postman, apps mobile) ou da lista de permitidos
         if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
             callback(null, true);
         } else {
@@ -63,40 +62,39 @@ let dadosRankingVitrine = [];
 // 4. ROTAS DA API
 // ===================================================================
 
-// ROTA PRINCIPAL DO CHAT (MODIFICADA PARA SER UM ESPECIALISTA EM FLASH CARDS)
+// ROTA PRINCIPAL DO CHAT (MODIFICADA PARA O FLUXO DE DUAS ETAPAS)
 app.post('/chat', async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, history } = req.body; // Agora recebemos o histórico também
         if (!message) {
             return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
         }
 
-        // ** AQUI ESTÁ A MUDANÇA **
-        // Instruímos o Gemini sobre sua personalidade e tarefa.
+        // ** NOVO PROMPT DE SISTEMA, MAIS INTELIGENTE **
         const promptDeSistema = `
-            Você é um assistente de estudos especializado em criar flash cards. 
-            Sua tarefa é transformar a solicitação do usuário em um flash card claro e conciso.
-            Responda sempre no seguinte formato:
+            Você é um assistente de estudos que cria flash cards em um fluxo de duas etapas.
 
-            **Pergunta:** [Aqui vai a pergunta direta sobre o tema]
-            **Resposta:** [Aqui vai a resposta direta e objetiva]
+            1.  **PRIMEIRA ETAPA (GERAR PERGUNTA):** Quando um usuário pede um tema (ex: "fale sobre o sistema solar"), sua ÚNICA resposta deve ser a PERGUNTA do flash card. Formate-a assim: "❓ [PERGUNTA COM EMOJIS RELEVANTES]". NUNCA inclua a resposta nesta etapa.
 
-            Se o usuário pedir para sair, mudar de tema ou apenas conversar, responda de forma amigável e útil, mas sempre se mantenha no personagem de um assistente de estudos.
-            Se o usuário disser "próximo", gere um novo flash card sobre o mesmo tema da última pergunta.
-            Se o usuário disser "resposta", apenas mostre a resposta do flash card anterior.
-            Exemplo de interação:
-            Usuário: "Revolução Francesa"
-            Você: 
-            **Pergunta:** Qual foi o principal evento que marcou o início da Revolução Francesa?
-            **Resposta:** A Queda da Bastilha em 14 de julho de 1789.
+            2.  **SEGUNDA ETAPA (GERAR RESPOSTA):** Quando o usuário digitar "resposta" (ou algo similar), você deve fornecer a resposta para a ÚLTIMA pergunta que você fez. Use o histórico da conversa para saber qual foi a última pergunta. Formate a resposta assim: "✅ [RESPOSTA DIRETA E CLARA]".
+
+            3.  **CONTINUAÇÃO:** Se o usuário disser "próximo", "outro", ou pedir um novo tema, inicie a PRIMEIRA ETAPA novamente com um novo flash card.
+
+            -   Seja criativo com os emojis e certifique-se de que eles combinam com o tema da pergunta.
+            -   Analise o histórico da conversa que o usuário enviará para entender em qual etapa você está.
         `;
 
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash-latest",
-            systemInstruction: promptDeSistema, // Aplicando a personalidade
+            systemInstruction: promptDeSistema,
         });
 
-        const result = await model.generateContent(message);
+        // Inicia o chat com o histórico para dar contexto ao Gemini
+        const chat = model.startChat({
+            history: history || [],
+        });
+
+        const result = await chat.sendMessage(message);
         const response = await result.response;
         const text = response.text();
         
