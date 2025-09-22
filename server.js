@@ -16,20 +16,19 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // Define a URL do frontend padrão se não estiver nas variáveis de ambiente
 if (!BUNDLE_URL_FRONTEND) {
-    console.log("AVISO: BUNDLE_URL_FRONTEND não definida. Usando valor padrão: https://chatbotflashcards.vercel.app" );
+    console.log("AVISO: BUNDLE_URL_FRONTEND não definida. Usando valor padrão: https://chatbotflashcards.vercel.app"  );
     BUNDLE_URL_FRONTEND = 'https://chatbotflashcards.vercel.app';
 }
 
-// Adiciona as origens permitidas (localhost + URL do bundle )
+// Adiciona as origens permitidas (localhost + URL do bundle  )
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:8080',
     'https://chatbotflashcards.vercel.app',
-    'https://chatbotflashcards.vercel.app/',
-    BUNDLE_URL_FRONTEND
+    BUNDLE_URL_FRONTEND // Garanta que esta variável não tenha barra final
 ];
 
-if (!GEMINI_API_KEY ) {
+if (!GEMINI_API_KEY  ) {
     console.error("ERRO FATAL: Variável de ambiente GEMINI_API_KEY não foi definida!");
     process.exit(1); // Para o servidor imediatamente
 }
@@ -46,9 +45,11 @@ if (!MONGO_URI_HISTORY) {
 const app = express();
 const corsOptions = {
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+        // Verifica se a origem da requisição está na lista de origens permitidas
+        if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
+            // Se a origem não for permitida, retorna um erro
             callback(new Error('Origem não permitida pelo CORS'));
         }
     },
@@ -413,13 +414,13 @@ app.post('/api/chat/historicos/:id/gerar-titulo', async (req, res) => {
     }
 });
 
-// ROTA PARA SALVAR TÍTULO
-app.put('/api/chat/historicos/:id', async (req, res) => {
+// ROTA PARA ATUALIZAR TÍTULO DO HISTÓRICO
+app.put('/api/chat/historicos/:id/atualizar-titulo', async (req, res) => {
     const { id } = req.params;
     const { titulo } = req.body;
-    
+
     if (!titulo || titulo.trim() === '') {
-        return res.status(400).json({ error: "Título é obrigatório." });
+        return res.status(400).json({ error: "O título não pode ser vazio." });
     }
 
     const client = new MongoClient(MONGO_URI_HISTORY);
@@ -428,42 +429,36 @@ app.put('/api/chat/historicos/:id', async (req, res) => {
         const db = client.db("MeuChatbotHistory");
         const collection = db.collection("chat_histories");
         const { ObjectId } = require('mongodb');
-        const result = await collection.findOneAndUpdate(
+        const result = await collection.updateOne(
             { _id: new ObjectId(id) },
-            { $set: { titulo: titulo.trim() } },
-            { returnDocument: 'after' }
+            { $set: { titulo: titulo.trim() } }
         );
-        
-        if (!result.value) {
+
+        if (result.matchedCount === 0) {
             return res.status(404).json({ error: "Histórico não encontrado." });
         }
-        
-        res.status(200).json(result.value);
-    } catch (error) { // ** A CHAVE QUE FALTAVA FOI ADICIONADA AQUI **
-        console.error("Erro ao salvar título:", error);
+
+        res.status(200).json({ message: "Título atualizado com sucesso." });
+    } catch (error) {
+        console.error("Erro ao atualizar título:", error);
         if (error.name === 'CastError') {
             return res.status(400).json({ error: "ID inválido." });
         }
-        res.status(500).json({ error: "Erro ao salvar título." });
+        res.status(500).json({ error: "Erro ao atualizar título." });
     } finally {
         if (client) await client.close();
     }
 });
 
-// ROTA PARA TESTAR SE VARIÁVEIS DE AMBIENTE ESTÃO OK
-app.get('/api/test-env', (req, res) => {
-    res.json({
-        GEMINI_API_KEY: GEMINI_API_KEY ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
-        MONGO_URI_LOGS: MONGO_URI_LOGS ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
-        MONGO_URI_HISTORY: MONGO_URI_HISTORY ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
-        BUNDLE_URL_FRONTEND: BUNDLE_URL_FRONTEND || '❌ NÃO DEFINIDA',
-        ADMIN_PASSWORD: ADMIN_PASSWORD ? '✅ DEFINIDA' : '❌ NÃO DEFINIDA'
-    });
+// ROTA PARA OBTER RANKING
+app.get('/api/ranking', (req, res) => {
+    // Ordena os bots pelo número de acessos em ordem decrescente
+    const rankingOrdenado = [...dadosRankingVitrine].sort((a, b) => b.contagem - a.contagem);
+    res.json(rankingOrdenado);
 });
 
 // 5. INICIALIZAÇÃO DO SERVIDOR
-const PORT = process.env.PORT || 3000;
-
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
