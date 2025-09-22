@@ -12,6 +12,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MONGO_URI_LOGS = process.env.MONGO_URI_LOGS;
 const MONGO_URI_HISTORY = process.env.MONGO_URI_HISTORY;
 let BUNDLE_URL_FRONTEND = process.env.BUNDLE_URL_FRONTEND;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // Define a URL do frontend padrão se não estiver nas variáveis de ambiente
 if (!BUNDLE_URL_FRONTEND) {
@@ -22,6 +23,7 @@ if (!BUNDLE_URL_FRONTEND) {
 // Adiciona as origens permitidas (localhost + URL do bundle )
 const allowedOrigins = [
     'http://localhost:3000',
+    'http://localhost:8080',
     'https://chatbotflashcards.vercel.app',
     'https://chatbotflashcards.vercel.app/',
     BUNDLE_URL_FRONTEND
@@ -59,10 +61,139 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 let dadosRankingVitrine = [];
 
 // ===================================================================
+// FUNÇÃO PARA VERIFICAR AUTENTICAÇÃO DE ADMIN
+// ===================================================================
+function verificarAutenticacaoAdmin(req, res, next) {
+    const senhaFornecida = req.headers['x-admin-password'] || req.body.adminPassword;
+    
+    if (!senhaFornecida || senhaFornecida !== ADMIN_PASSWORD) {
+        return res.status(403).json({ error: 'Acesso negado. Senha de administrador incorreta.' });
+    }
+    
+    next();
+}
+
+// ===================================================================
 // 4. ROTAS DA API
 // ===================================================================
 
-// ROTA PRINCIPAL DO CHAT (COM PROMPT CORRIGIDO E MAIS RÍGIDO)
+// ENDPOINTS DE ADMINISTRAÇÃO
+// Endpoint para obter estatísticas do admin
+app.get('/api/admin/stats', verificarAutenticacaoAdmin, async (req, res) => {
+    const client = new MongoClient(MONGO_URI_HISTORY);
+    try {
+        await client.connect();
+        const db = client.db("MeuChatbotHistory");
+        const collection = db.collection("chat_histories");
+        
+        // Contar total de conversas
+        const totalConversas = await collection.countDocuments();
+        
+        // Contar total de mensagens
+        const conversas = await collection.find({}).toArray();
+        let totalMensagens = 0;
+        conversas.forEach(conversa => {
+            if (conversa.conversation && Array.isArray(conversa.conversation)) {
+                totalMensagens += conversa.conversation.length;
+            }
+        });
+        
+        // Buscar últimas 5 conversas
+        const ultimasConversas = await collection.find({})
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray();
+        
+        const ultimasConversasFormatadas = ultimasConversas.map(conversa => ({
+            id: conversa._id,
+            titulo: conversa.titulo || 'Conversa sem título',
+            dataHora: conversa.createdAt
+        }));
+        
+        res.json({
+            totalConversas,
+            totalMensagens,
+            ultimasConversas: ultimasConversasFormatadas
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({ error: 'Erro ao buscar estatísticas do sistema.' });
+    } finally {
+        if (client) await client.close();
+    }
+});
+
+// Endpoint para obter instrução de sistema atual
+app.get('/api/admin/system-instruction', verificarAutenticacaoAdmin, async (req, res) => {
+    const client = new MongoClient(MONGO_URI_HISTORY);
+    try {
+        await client.connect();
+        const db = client.db("MeuChatbotHistory");
+        const collection = db.collection("system_config");
+        
+        const config = await collection.findOne({ type: 'system_instruction' });
+        
+        if (!config) {
+            // Retorna a instrução padrão se não houver configuração salva
+            const defaultInstruction = `
+            Você é um assistente de estudos que cria flash cards. Siga estas regras ESTRITAMENTE.
+
+            REGRA 1: Se a última mensagem do usuário NÃO for "resposta" (ou sinônimos), sua única ação é criar uma PERGUNTA.
+            - Formato OBRIGATÓRIO: "❓ [PERGUNTA COM EMOJIS RELEVANTES]"
+            - É PROIBIDO incluir a palavra "Resposta" ou o conteúdo da resposta nesta etapa. APENAS a pergunta.
+
+            REGRA 2: Se a última mensagem do usuário for "resposta" (ou sinônimos como "mostre a resposta", "qual a resposta"), sua única ação é revelar a resposta da pergunta anterior.
+            - Use o histórico da conversa para saber qual foi a última pergunta.
+            - Formato OBRIGATÓRIO: "✅ [RESPOSTA DIRETA E CLARA]"
+
+            REGRA 3: Se o usuário pedir um novo tema, ou disser "próximo", siga a REGRA 1.
+            `;
+            
+            res.json({ instruction: defaultInstruction.trim() });
+        } else {
+            res.json({ instruction: config.instruction });
+        }
+        
+    } catch (error) {
+        console.error('Erro ao buscar instrução de sistema:', error);
+        res.status(500).json({ error: 'Erro ao buscar instrução de sistema.' });
+    } finally {
+        if (client) await client.close();
+    }
+});
+
+// Endpoint para atualizar instrução de sistema
+app.post('/api/admin/system-instruction', verificarAutenticacaoAdmin, async (req, res) => {
+    const { instruction } = req.body;
+    
+    if (!instruction || instruction.trim() === '') {
+        return res.status(400).json({ error: 'Instrução de sistema é obrigatória.' });
+    }
+    
+    const client = new MongoClient(MONGO_URI_HISTORY);
+    try {
+        await client.connect();
+        const db = client.db("MeuChatbotHistory");
+        const collection = db.collection("system_config");
+        
+        await collection.replaceOne(
+            { type: 'system_instruction' },
+            { type: 'system_instruction', instruction: instruction.trim(), updatedAt: new Date() },
+            { upsert: true }
+        );
+        
+        res.json({ message: 'Instrução de sistema atualizada com sucesso.' });
+        
+    } catch (error) {
+        console.error('Erro ao atualizar instrução de sistema:', error);
+        res.status(500).json({ error: 'Erro ao atualizar instrução de sistema.' });
+    } finally {
+        if (client) await client.close();
+    }
+});
+
+// ROTA PRINCIPAL DO CHAT (COM PROMPT DINÂMICO)
 app.post('/chat', async (req, res) => {
     try {
         const { message, history } = req.body;
@@ -70,7 +201,9 @@ app.post('/chat', async (req, res) => {
             return res.status(400).json({ error: 'Nenhuma mensagem foi fornecida.' });
         }
 
-        const promptDeSistema = `
+        // Buscar instrução de sistema configurada pelo admin
+        const client = new MongoClient(MONGO_URI_HISTORY);
+        let promptDeSistema = `
             Você é um assistente de estudos que cria flash cards. Siga estas regras ESTRITAMENTE.
 
             REGRA 1: Se a última mensagem do usuário NÃO for "resposta" (ou sinônimos), sua única ação é criar uma PERGUNTA.
@@ -100,6 +233,21 @@ app.post('/chat', async (req, res) => {
             Última Mensagem do Usuário: "resposta"
             Sua Resposta (seguindo REGRA 2): "✅ Júpiter."
         `;
+
+        try {
+            await client.connect();
+            const db = client.db("MeuChatbotHistory");
+            const collection = db.collection("system_config");
+            const config = await collection.findOne({ type: 'system_instruction' });
+            
+            if (config && config.instruction) {
+                promptDeSistema = config.instruction;
+            }
+        } catch (dbError) {
+            console.error('Erro ao buscar instrução de sistema, usando padrão:', dbError);
+        } finally {
+            if (client) await client.close();
+        }
 
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash-latest",
@@ -308,7 +456,8 @@ app.get('/api/test-env', (req, res) => {
         GEMINI_API_KEY: GEMINI_API_KEY ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
         MONGO_URI_LOGS: MONGO_URI_LOGS ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
         MONGO_URI_HISTORY: MONGO_URI_HISTORY ? '✅ RECEBIDA' : '❌ NÃO DEFINIDA',
-        BUNDLE_URL_FRONTEND: BUNDLE_URL_FRONTEND || '❌ NÃO DEFINIDA'
+        BUNDLE_URL_FRONTEND: BUNDLE_URL_FRONTEND || '❌ NÃO DEFINIDA',
+        ADMIN_PASSWORD: ADMIN_PASSWORD ? '✅ DEFINIDA' : '❌ NÃO DEFINIDA'
     });
 });
 
