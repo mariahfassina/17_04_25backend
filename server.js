@@ -1,3 +1,4 @@
+
 require("dotenv").config();
 const express = require("express");
 // const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); // Comentado
@@ -91,7 +92,7 @@ app.post("/api/admin/system-instruction", authenticateAdmin, (req, res) => {
 // Rota para estatísticas de admin (agora com dados estáticos)
 app.get("/api/admin/stats", authenticateAdmin, async (req, res) => {
     // Dados estáticos para simular as estatísticas
-    const totalConversas = 150;
+    const totalConversas = 16;
     const ultimasConversas = [
         { title: "Conversa sobre clima...", createdAt: new Date("2025-10-20T10:00:00Z") },
         { title: "Dúvidas sobre IA...", createdAt: new Date("2025-10-20T09:30:00Z") },
@@ -113,25 +114,25 @@ app.get("/api/admin/stats", authenticateAdmin, async (req, res) => {
 app.get("/api/admin/dashboard", authenticateAdmin, async (req, res) => {
     // Dados estáticos para simular as métricas do dashboard
     const engagementMetrics = {
-        averageMessageCount: 5.2,
-        shortConversations: 30,
-        longConversations: 70,
-        totalConversations: 100,
+        averageMessageCount: 3.5,
+        shortConversations: 8,
+        longConversations: 8,
+        totalConversations: 16,
     };
 
     const topUsers = [
-        { _id: "user123", chatCount: 25 },
-        { _id: "user456", chatCount: 18 },
-        { _id: "user789", chatCount: 12 },
-        { _id: "userABC", chatCount: 9 },
-        { _id: "userDEF", chatCount: 7 },
+        { _id: "userA", chatCount: 5 },
+        { _id: "userB", chatCount: 4 },
+        { _id: "userC", chatCount: 3 },
+        { _id: "userD", chatCount: 2 },
+        { _id: "userE", chatCount: 2 },
     ];
 
     const failureAnalysis = {
-        inconclusiveResponsesCount: 5,
+        inconclusiveResponsesCount: 2,
         failedConversations: [
-            { title: "Problema com cálculo", userId: "user123", messages: "não entendi | pode reformular" },
-            { title: "Solicitação complexa", userId: "userGHI", messages: "não posso ajudar com isso" },
+            { title: "Erro de compreensão", userId: "userA", messages: "não entendi" },
+            { title: "Limitação de conhecimento", userId: "userC", messages: "não posso ajudar com isso" },
         ],
     };
 
@@ -144,5 +145,6 @@ app.get("/api/admin/dashboard", authenticateAdmin, async (req, res) => {
 
 // Start Server
 app.listen(port, () => {
-    console.log(`Servidor backend rodando em http://localhost:${port}` );
+    console.log(`Servidor backend rodando em http://localhost:${port}`);
 });
+
