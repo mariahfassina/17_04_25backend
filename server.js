@@ -1,162 +1,236 @@
-// admin.js (Versão final corrigida )
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Seleciona todos os elementos do HTML pelos IDs corretos
-    const loginContainer = document.getElementById('login-container');
-    const adminPanel = document.getElementById('admin-panel');
-    const passwordInput = document.getElementById('password-input');
-    const loginBtn = document.getElementById('login-btn');
-    const logoutBtn = document.getElementById('logout-btn');
-    const saveInstructionBtn = document.getElementById('save-instruction-btn');
+require("dotenv").config();
+const express = require("express");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const cors = require("cors");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-    // URL ATUALIZADA do seu backend no Render.com
-    const API_BASE_URL = 'https://one7-04-25backend.onrender.com';
+const app = express();
+const port = process.env.PORT || 3000;
 
-    // --- Funções Principais ---
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-    const checkLogin = ( ) => {
-        const storedPassword = sessionStorage.getItem('adminPassword');
-        if (storedPassword) {
-            showAdminPanel(storedPassword);
-        } else {
-            showLogin();
-        }
-    };
-
-    const showLogin = () => {
-        loginContainer.classList.remove('hidden');
-        adminPanel.classList.add('hidden');
-    };
-
-    const showAdminPanel = (password) => {
-        loginContainer.classList.add('hidden');
-        adminPanel.classList.remove('hidden');
-        fetchAdminData(password);
-        fetchSystemInstruction(password);
-    };
-
-    const handleLogin = () => {
-        const password = passwordInput.value;
-        if (!password) {
-            alert('Por favor, insira a senha.');
-            return;
-        }
-        sessionStorage.setItem('adminPassword', password);
-        showAdminPanel(password);
-    };
-
-    const handleLogout = () => {
-        sessionStorage.removeItem('adminPassword');
-        passwordInput.value = '';
-        showLogin();
-    };
-
-    // --- Funções de Comunicação com a API ---
-
-    const fetchAdminData = async (password) => {
-        try {
-            // Note o cabeçalho 'x-admin-password' que o backend espera
-            const response = await fetch(`${API_BASE_URL}/api/admin/stats`, {
-                headers: { 'x-admin-password': password }
-            });
-
-            if (response.status === 403) {
-                alert('Senha incorreta. Acesso negado.');
-                handleLogout();
-                return;
-            }
-            if (!response.ok) {
-                throw new Error('Falha ao buscar dados do servidor.');
-            }
-
-            const data = await response.json();
-            document.getElementById('total-conversas').innerText = data.totalConversas;
-            
-            const conversasList = document.getElementById('ultimas-conversas');
-            conversasList.innerHTML = '';
-            if (data.ultimasConversas && data.ultimasConversas.length > 0) {
-                data.ultimasConversas.forEach(conversa => {
-                    const li = document.createElement('li');
-                    const date = new Date(conversa.createdAt).toLocaleString('pt-BR');
-                    li.textContent = `${conversa.title} - ${date}`;
-                    conversasList.appendChild(li);
-                });
-            } else {
-                conversasList.innerHTML = '<li>Nenhuma conversa encontrada.</li>';
-            }
-        } catch (error) {
-            console.error('Erro ao carregar métricas:', error);
-            alert('Não foi possível carregar as métricas. Verifique o console para detalhes.');
-        }
-    };
-
-    const fetchSystemInstruction = async (password) => {
-        const instructionTextarea = document.getElementById('system-instruction-input');
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/system-instruction`, {
-                headers: { 'x-admin-password': password }
-            });
-            if (!response.ok) throw new Error('Falha ao buscar instrução.');
-            const data = await response.json();
-            instructionTextarea.value = data.instruction;
-        } catch (error) {
-            console.error('Erro ao carregar instrução:', error);
-            instructionTextarea.value = 'Erro ao carregar a instrução do sistema.';
-        }
-    };
-
-    const saveSystemInstruction = async () => {
-        const password = sessionStorage.getItem('adminPassword');
-        const newInstruction = document.getElementById('system-instruction-input').value;
-        const saveStatus = document.getElementById('save-status');
-        
-        saveInstructionBtn.disabled = true;
-        saveStatus.textContent = 'Salvando...';
-        saveStatus.className = 'status-saving';
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/system-instruction`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-admin-password': password
-                },
-                body: JSON.stringify({ newInstruction }) // O backend espera 'newInstruction'
-            });
-
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Erro desconhecido ao salvar.');
-
-            saveStatus.textContent = data.message;
-            saveStatus.className = 'status-success';
-        } catch (error) {
-            saveStatus.textContent = `Erro: ${error.message}`;
-            saveStatus.className = 'status-error';
-        } finally {
-            saveInstructionBtn.disabled = false;
-            setTimeout(() => { saveStatus.textContent = ''; }, 4000);
-        }
-    };
-
-    // --- Adicionando os "Ouvintes de Evento" ---
-    // Isso garante que os botões funcionem sem `onclick` no HTML
-    
-    // Verifica se os elementos existem antes de adicionar o listener
-    if (loginBtn) {
-        loginBtn.addEventListener('click', handleLogin);
+// MongoDB Connection
+const uri = process.env.MONGODB_URI;
+const client = new MongoClient(uri, {
+    serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
     }
-    if (passwordInput) {
-        passwordInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleLogin();
-        });
-    }
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    if (saveInstructionBtn) {
-        saveInstructionBtn.addEventListener('click', saveSystemInstruction);
-    }
-
-    // Inicia a verificação de login assim que a página carrega
-    checkLogin();
 });
+
+async function run() {
+    try {
+        await client.connect();
+        await client.db("admin").command({ ping: 1 });
+        console.log("Conectado ao MongoDB!");
+    } catch (error) {
+        console.error("Erro ao conectar ao MongoDB:", error);
+        process.exit(1);
+    }
+}
+run().catch(console.dir);
+
+// Google Gemini Setup
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+// Admin Password (for demonstration purposes, use environment variables in production)
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+
+// Middleware de autenticação para rotas de admin
+const authenticateAdmin = (req, res, next) => {
+    const adminPassword = req.headers["x-admin-password"];
+    if (adminPassword === ADMIN_PASSWORD) {
+        next();
+    } else {
+        res.status(403).json({ message: "Acesso negado. Senha de administrador incorreta." });
+    }
+};
+
+// Rota para o chatbot
+app.post("/chat", async (req, res) => {
+    try {
+        const { prompt, userId, chatId } = req.body;
+        const db = client.db("chatbot_db");
+        const chatsCollection = db.collection("chats");
+
+        let currentChat;
+        if (chatId) {
+            currentChat = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
+        }
+
+        if (!currentChat) {
+            currentChat = {
+                userId: userId || "anonymous",
+                title: prompt.substring(0, 50) + "...", // Título inicial da conversa
+                messages: [],
+                createdAt: new Date(),
+            };
+        }
+
+        // Adiciona a mensagem do usuário ao histórico
+        currentChat.messages.push({ role: "user", parts: [{ text: prompt }] });
+
+        const chat = model.startChat({ history: currentChat.messages });
+        const result = await chat.sendMessage(prompt);
+        const response = await result.response;
+        const botResponse = response.text();
+
+        // Adiciona a resposta do bot ao histórico
+        currentChat.messages.push({ role: "model", parts: [{ text: botResponse }] });
+
+        if (chatId) {
+            await chatsCollection.updateOne(
+                { _id: new ObjectId(chatId) },
+                { $set: { messages: currentChat.messages } }
+            );
+        } else {
+            const insertResult = await chatsCollection.insertOne(currentChat);
+            currentChat._id = insertResult.insertedId;
+        }
+
+        res.json({ response: botResponse, chatId: currentChat._id });
+    } catch (error) {
+        console.error("Erro no chatbot:", error);
+        res.status(500).json({ error: "Erro interno do servidor." });
+    }
+});
+
+// Rota para buscar o histórico de conversas de um usuário
+app.get("/history/:userId", async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const db = client.db("chatbot_db");
+        const chatsCollection = db.collection("chats");
+
+        const userChats = await chatsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
+        res.json(userChats);
+    } catch (error) {
+        console.error("Erro ao buscar histórico:", error);
+        res.status(500).json({ error: "Erro interno do servidor." });
+    }
+});
+
+// Rota para buscar uma conversa específica
+app.get("/chat/:chatId", async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const db = client.db("chatbot_db");
+        const chatsCollection = db.collection("chats");
+
+        const chat = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
+        if (!chat) {
+            return res.status(404).json({ message: "Conversa não encontrada." });
+        }
+        res.json(chat);
+    } catch (error) {
+        console.error("Erro ao buscar conversa:", error);
+        res.status(500).json({ error: "Erro interno do servidor." });
+    }
+});
+
+// Rota para a instrução do sistema (admin)
+let systemInstruction = "Você é um chatbot prestativo."; // Default instruction
+
+app.get("/api/admin/system-instruction", authenticateAdmin, (req, res) => {
+    res.json({ instruction: systemInstruction });
+});
+
+app.post("/api/admin/system-instruction", authenticateAdmin, (req, res) => {
+    const { newInstruction } = req.body;
+    if (newInstruction) {
+        systemInstruction = newInstruction;
+        res.json({ message: "Instrução do sistema atualizada com sucesso." });
+    } else {
+        res.status(400).json({ message: "Nova instrução não fornecida." });
+    }
+});
+
+// Rota para estatísticas de admin (existente)
+app.get("/api/admin/stats", authenticateAdmin, async (req, res) => {
+    try {
+        const db = client.db("chatbot_db");
+        const chatsCollection = db.collection("chats");
+
+        const totalConversas = await chatsCollection.countDocuments();
+        const ultimasConversas = await chatsCollection.find({}).sort({ createdAt: -1 }).limit(5).toArray();
+
+        res.json({
+            totalConversas,
+            ultimasConversas: ultimasConversas.map(chat => ({
+                title: chat.title,
+                createdAt: chat.createdAt
+            }))
+        });
+    } catch (error) {
+        console.error("Erro ao buscar estatísticas de admin:", error);
+        res.status(500).json({ message: "Erro ao buscar estatísticas de admin." });
+    }
+});
+
+// NOVO ENDPOINT DO DASHBOARD
+app.get("/api/admin/dashboard", authenticateAdmin, async (req, res) => {
+    try {
+        const db = client.db("chatbot_db");
+        const chatsCollection = db.collection("chats");
+
+        // 1. Profundidade de Engajamento
+        const engagementMetrics = await chatsCollection.aggregate([
+            { $addFields: { messageCount: { $size: "$messages" } } },
+            { $group: {
+                _id: null,
+                averageMessageCount: { $avg: "$messageCount" },
+                shortConversations: { $sum: { $cond: [{ $lte: ["$messageCount", 3] }, 1, 0] } },
+                longConversations: { $sum: { $cond: [{ $gt: ["$messageCount", 3] }, 1, 0] } },
+                totalConversations: { $sum: 1 }
+            }},
+            { $project: { _id: 0 } }
+        ]).toArray();
+
+        // 2. Lealdade do Usuário (Top 5 Agentes Mais Ativos)
+        const topUsers = await chatsCollection.aggregate([
+            { $group: { _id: "$userId", chatCount: { $sum: 1 } } },
+            { $sort: { chatCount: -1 } },
+            { $limit: 5 }
+        ]).toArray();
+
+        // 3. Análise de Falhas (Respostas Inconclusivas do Bot)
+        const failureKeywords = [/não entendi/i, /não posso ajudar com isso/i, /pode reformular/i, /desculpe, não compreendi/i]; // Adicione mais conforme necessário
+        const failedConversations = await chatsCollection.aggregate([
+            { $unwind: "$messages" },
+            { $match: { "messages.role": "model", "messages.parts.text": { $in: failureKeywords } } },
+            { $group: { _id: "$_id", userId: { $first: "$userId" }, title: { $first: "$title" }, failedMessages: { $push: "$messages.parts.text" } } },
+            { $project: { _id: 1, userId: 1, title: 1, failedMessages: 1 } }
+        ]).toArray();
+        
+        const inconclusiveResponsesCount = failedConversations.length;
+
+        res.json({
+            engagementMetrics: engagementMetrics[0] || { averageMessageCount: 0, shortConversations: 0, longConversations: 0, totalConversations: 0 },
+            topUsers,
+            failureAnalysis: {
+                inconclusiveResponsesCount,
+                failedConversations: failedConversations.map(conv => ({
+                    title: conv.title,
+                    userId: conv.userId,
+                    messages: conv.failedMessages.join(" | ")
+                }))
+            }
+        });
+
+    } catch (error) {
+        console.error("Erro ao buscar dados do dashboard:", error);
+        res.status(500).json({ message: "Erro ao buscar dados do dashboard", error: error.message });
+    }
+});
+
+// Start Server
+app.listen(port, () => {
+    console.log(`Servidor backend rodando em http://localhost:${port}`);
+});
+
+
