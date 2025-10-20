@@ -1,7 +1,6 @@
 
 require("dotenv").config();
 const express = require("express");
-// const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); // Comentado
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
@@ -147,4 +146,5 @@ app.get("/api/admin/dashboard", authenticateAdmin, async (req, res) => {
 app.listen(port, () => {
     console.log(`Servidor backend rodando em http://localhost:${port}`);
 });
+
 
