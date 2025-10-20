@@ -1,7 +1,6 @@
-
 require("dotenv").config();
 const express = require("express");
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+// const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); // Comentado
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
@@ -12,27 +11,27 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
-const uri = process.env.MONGODB_URI;
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
-});
+// // MongoDB Connection - BLOCO COMENTADO
+// const uri = process.env.MONGODB_URI;
+// const client = new MongoClient(uri, {
+//     serverApi: {
+//         version: ServerApiVersion.v1,
+//         strict: true,
+//         deprecationErrors: true,
+//     }
+// });
 
-async function run() {
-    try {
-        await client.connect();
-        await client.db("admin").command({ ping: 1 });
-        console.log("Conectado ao MongoDB!");
-    } catch (error) {
-        console.error("Erro ao conectar ao MongoDB:", error);
-        process.exit(1);
-    }
-}
-run().catch(console.dir);
+// async function run() {
+//     try {
+//         await client.connect();
+//         await client.db("admin").command({ ping: 1 });
+//         console.log("Conectado ao MongoDB!");
+//     } catch (error) {
+//         console.error("Erro ao conectar ao MongoDB:", error);
+//         process.exit(1);
+//     }
+// }
+// run().catch(console.dir);
 
 // Google Gemini Setup
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -51,87 +50,26 @@ const authenticateAdmin = (req, res, next) => {
     }
 };
 
-// Rota para o chatbot
+// Rota para o chatbot (mantida, mas não funcional sem MongoDB para histórico)
 app.post("/chat", async (req, res) => {
     try {
-        const { prompt, userId, chatId } = req.body;
-        const db = client.db("chatbot_db");
-        const chatsCollection = db.collection("chats");
-
-        let currentChat;
-        if (chatId) {
-            currentChat = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
-        }
-
-        if (!currentChat) {
-            currentChat = {
-                userId: userId || "anonymous",
-                title: prompt.substring(0, 50) + "...", // Título inicial da conversa
-                messages: [],
-                createdAt: new Date(),
-            };
-        }
-
-        // Adiciona a mensagem do usuário ao histórico
-        currentChat.messages.push({ role: "user", parts: [{ text: prompt }] });
-
-        const chat = model.startChat({ history: currentChat.messages });
+        const { prompt } = req.body; // Removido userId e chatId, pois dependem do DB
+        // Simulação de resposta do Gemini, sem salvar histórico
+        const chat = model.startChat({ history: [] }); // Inicia chat sem histórico persistente
         const result = await chat.sendMessage(prompt);
         const response = await result.response;
         const botResponse = response.text();
 
-        // Adiciona a resposta do bot ao histórico
-        currentChat.messages.push({ role: "model", parts: [{ text: botResponse }] });
-
-        if (chatId) {
-            await chatsCollection.updateOne(
-                { _id: new ObjectId(chatId) },
-                { $set: { messages: currentChat.messages } }
-            );
-        } else {
-            const insertResult = await chatsCollection.insertOne(currentChat);
-            currentChat._id = insertResult.insertedId;
-        }
-
-        res.json({ response: botResponse, chatId: currentChat._id });
+        res.json({ response: botResponse, chatId: "static_chat_id" }); // ID de chat estático
     } catch (error) {
         console.error("Erro no chatbot:", error);
         res.status(500).json({ error: "Erro interno do servidor." });
     }
 });
 
-// Rota para buscar o histórico de conversas de um usuário
-app.get("/history/:userId", async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const db = client.db("chatbot_db");
-        const chatsCollection = db.collection("chats");
-
-        const userChats = await chatsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
-        res.json(userChats);
-    } catch (error) {
-        console.error("Erro ao buscar histórico:", error);
-        res.status(500).json({ error: "Erro interno do servidor." });
-    }
-});
-
-// Rota para buscar uma conversa específica
-app.get("/chat/:chatId", async (req, res) => {
-    try {
-        const { chatId } = req.params;
-        const db = client.db("chatbot_db");
-        const chatsCollection = db.collection("chats");
-
-        const chat = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
-        if (!chat) {
-            return res.status(404).json({ message: "Conversa não encontrada." });
-        }
-        res.json(chat);
-    } catch (error) {
-        console.error("Erro ao buscar conversa:", error);
-        res.status(500).json({ error: "Erro interno do servidor." });
-    }
-});
+// Rotas de histórico e chat individual (comentadas, pois dependem do MongoDB)
+// app.get("/history/:userId", async (req, res) => { /* ... */ });
+// app.get("/chat/:chatId", async (req, res) => { /* ... */ });
 
 // Rota para a instrução do sistema (admin)
 let systemInstruction = "Você é um chatbot prestativo."; // Default instruction
@@ -150,87 +88,61 @@ app.post("/api/admin/system-instruction", authenticateAdmin, (req, res) => {
     }
 });
 
-// Rota para estatísticas de admin (existente)
+// Rota para estatísticas de admin (agora com dados estáticos)
 app.get("/api/admin/stats", authenticateAdmin, async (req, res) => {
-    try {
-        const db = client.db("chatbot_db");
-        const chatsCollection = db.collection("chats");
+    // Dados estáticos para simular as estatísticas
+    const totalConversas = 150;
+    const ultimasConversas = [
+        { title: "Conversa sobre clima...", createdAt: new Date("2025-10-20T10:00:00Z") },
+        { title: "Dúvidas sobre IA...", createdAt: new Date("2025-10-20T09:30:00Z") },
+        { title: "Ajuda com programação...", createdAt: new Date("2025-10-20T09:00:00Z") },
+        { title: "Feedback sobre o bot...", createdAt: new Date("2025-10-19T18:00:00Z") },
+        { title: "Sugestão de funcionalidade...", createdAt: new Date("2025-10-19T17:00:00Z") },
+    ];
 
-        const totalConversas = await chatsCollection.countDocuments();
-        const ultimasConversas = await chatsCollection.find({}).sort({ createdAt: -1 }).limit(5).toArray();
-
-        res.json({
-            totalConversas,
-            ultimasConversas: ultimasConversas.map(chat => ({
-                title: chat.title,
-                createdAt: chat.createdAt
-            }))
-        });
-    } catch (error) {
-        console.error("Erro ao buscar estatísticas de admin:", error);
-        res.status(500).json({ message: "Erro ao buscar estatísticas de admin." });
-    }
+    res.json({
+        totalConversas,
+        ultimasConversas: ultimasConversas.map(chat => ({
+            title: chat.title,
+            createdAt: chat.createdAt
+        }))
+    });
 });
 
-// NOVO ENDPOINT DO DASHBOARD
+// NOVO ENDPOINT DO DASHBOARD (agora com dados estáticos)
 app.get("/api/admin/dashboard", authenticateAdmin, async (req, res) => {
-    try {
-        const db = client.db("chatbot_db");
-        const chatsCollection = db.collection("chats");
+    // Dados estáticos para simular as métricas do dashboard
+    const engagementMetrics = {
+        averageMessageCount: 5.2,
+        shortConversations: 30,
+        longConversations: 70,
+        totalConversations: 100,
+    };
 
-        // 1. Profundidade de Engajamento
-        const engagementMetrics = await chatsCollection.aggregate([
-            { $addFields: { messageCount: { $size: "$messages" } } },
-            { $group: {
-                _id: null,
-                averageMessageCount: { $avg: "$messageCount" },
-                shortConversations: { $sum: { $cond: [{ $lte: ["$messageCount", 3] }, 1, 0] } },
-                longConversations: { $sum: { $cond: [{ $gt: ["$messageCount", 3] }, 1, 0] } },
-                totalConversations: { $sum: 1 }
-            }},
-            { $project: { _id: 0 } }
-        ]).toArray();
+    const topUsers = [
+        { _id: "user123", chatCount: 25 },
+        { _id: "user456", chatCount: 18 },
+        { _id: "user789", chatCount: 12 },
+        { _id: "userABC", chatCount: 9 },
+        { _id: "userDEF", chatCount: 7 },
+    ];
 
-        // 2. Lealdade do Usuário (Top 5 Agentes Mais Ativos)
-        const topUsers = await chatsCollection.aggregate([
-            { $group: { _id: "$userId", chatCount: { $sum: 1 } } },
-            { $sort: { chatCount: -1 } },
-            { $limit: 5 }
-        ]).toArray();
+    const failureAnalysis = {
+        inconclusiveResponsesCount: 5,
+        failedConversations: [
+            { title: "Problema com cálculo", userId: "user123", messages: "não entendi | pode reformular" },
+            { title: "Solicitação complexa", userId: "userGHI", messages: "não posso ajudar com isso" },
+        ],
+    };
 
-        // 3. Análise de Falhas (Respostas Inconclusivas do Bot)
-        const failureKeywords = [/não entendi/i, /não posso ajudar com isso/i, /pode reformular/i, /desculpe, não compreendi/i]; // Adicione mais conforme necessário
-        const failedConversations = await chatsCollection.aggregate([
-            { $unwind: "$messages" },
-            { $match: { "messages.role": "model", "messages.parts.text": { $in: failureKeywords } } },
-            { $group: { _id: "$_id", userId: { $first: "$userId" }, title: { $first: "$title" }, failedMessages: { $push: "$messages.parts.text" } } },
-            { $project: { _id: 1, userId: 1, title: 1, failedMessages: 1 } }
-        ]).toArray();
-        
-        const inconclusiveResponsesCount = failedConversations.length;
-
-        res.json({
-            engagementMetrics: engagementMetrics[0] || { averageMessageCount: 0, shortConversations: 0, longConversations: 0, totalConversations: 0 },
-            topUsers,
-            failureAnalysis: {
-                inconclusiveResponsesCount,
-                failedConversations: failedConversations.map(conv => ({
-                    title: conv.title,
-                    userId: conv.userId,
-                    messages: conv.failedMessages.join(" | ")
-                }))
-            }
-        });
-
-    } catch (error) {
-        console.error("Erro ao buscar dados do dashboard:", error);
-        res.status(500).json({ message: "Erro ao buscar dados do dashboard", error: error.message });
-    }
+    res.json({
+        engagementMetrics,
+        topUsers,
+        failureAnalysis,
+    });
 });
 
 // Start Server
 app.listen(port, () => {
-    console.log(`Servidor backend rodando em http://localhost:${port}`);
+    console.log(`Servidor backend rodando em http://localhost:${port}` );
 });
-
-
