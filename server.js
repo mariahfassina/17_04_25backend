@@ -37,6 +37,9 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
+// Importa a simulação de preferências de usuário
+const { getCustomInstruction, saveCustomInstruction, STATIC_USER_ID } = require("./user_preferences");
+
 // Admin Password (for demonstration purposes, use environment variables in production)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
@@ -54,9 +57,27 @@ const authenticateAdmin = (req, res, next) => {
 app.post("/chat", async (req, res) => {
     try {
         const { prompt } = req.body; // Removido userId e chatId, pois dependem do DB
+        
+        // 1. Lógica de Personalidade Adaptativa (Prioridade do Usuário)
+        const userId = STATIC_USER_ID; // Simula o usuário logado
+        const customInstruction = getCustomInstruction(userId);
+        
+        let finalSystemInstruction;
+        if (customInstruction && customInstruction.trim() !== "") {
+            finalSystemInstruction = customInstruction;
+        } else {
+            finalSystemInstruction = systemInstruction; // Usa a global do admin
+        }
+        
+        // console.log("Instrução de Sistema Final:", finalSystemInstruction); // Para debug
+        
+        const systemMessage = {
+            role: "user", // O Gemini usa 'user' para a instrução de sistema no histórico
+            parts: [{ text: finalSystemInstruction }]
+        };
         // Simulação de resposta do Gemini, sem salvar histórico
-        const chat = model.startChat({ history: [] }); // Inicia chat sem histórico persistente
-        const result = await chat.sendMessage(prompt);
+        const chat = model.startChat({ history: [systemMessage] }); // Inicia chat com a instrução de sistema correta
+        const result = await chat.sendMessage({ role: "user", parts: [{ text: prompt }] });
         const response = await result.response;
         const botResponse = response.text();
 
@@ -73,6 +94,29 @@ app.post("/chat", async (req, res) => {
 
 // Rota para a instrução do sistema (admin)
 let systemInstruction = "Você é um chatbot prestativo."; // Default instruction
+
+// Simulação de autenticação de usuário (já que não há login real)
+const authenticateUser = (req, res, next) => {
+    // Em um cenário estático, simplesmente passamos o ID fixo
+    req.userId = STATIC_USER_ID;
+    next();
+};
+
+// Endpoints de Preferências do Usuário
+app.get("/api/user/preferences", authenticateUser, (req, res) => {
+    const instruction = getCustomInstruction(req.userId);
+    res.json({ systemInstruction: instruction || "" });
+});
+
+app.put("/api/user/preferences", authenticateUser, (req, res) => {
+    const { newInstruction } = req.body;
+    if (typeof newInstruction === "string") {
+        saveCustomInstruction(req.userId, newInstruction);
+        res.json({ message: "Instrução de sistema personalizada salva com sucesso." });
+    } else {
+        res.status(400).json({ message: "Nova instrução não fornecida." });
+    }
+});
 
 app.get("/api/admin/system-instruction", authenticateAdmin, (req, res) => {
     res.json({ instruction: systemInstruction });
