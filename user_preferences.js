@@ -17,13 +17,13 @@ const loadPreferences = () => {
       userPreferences = JSON.parse(data);
     } else {
       // Se não existir, define um valor padrão e cria o arquivo
-      userPreferences = { personality: "Você é um assistente de IA prestativo e amigável." };
+      userPreferences = { personality: "Você é um assistente de IA focado em criar flashcards para estudos. Sempre que o usuário pedir um tema, crie uma pergunta (com o emoji ❓ no final) e, em uma nova linha, a resposta (com o emoji 💡 no final), mas esconda a resposta. Apenas indique que a resposta está pronta." };
       fs.writeFileSync(preferencesFilePath, JSON.stringify(userPreferences, null, 2), 'utf8');
     }
   } catch (error) {
     console.error('Erro ao carregar o arquivo de preferências:', error);
     // Em caso de erro na leitura, usa um valor padrão para não quebrar a aplicação
-    userPreferences = { personality: "Você é um assistente de IA prestativo e amigável." };
+    userPreferences = { personality: "Você é um assistente prestativo." };
   }
 };
 
