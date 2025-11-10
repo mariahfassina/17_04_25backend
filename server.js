@@ -15,6 +15,7 @@ if (!process.env.GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "CHAVE_API_AUSENTE");
 
+// Rota de chat simplificada e mais robusta
 app.post('/chat', async (req, res) => {
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: 'Erro de configuração no servidor: A chave da API do Gemini (GEMINI_API_KEY) não foi definida.' });
@@ -22,37 +23,40 @@ app.post('/chat', async (req, res) => {
 
   try {
     const { history } = req.body;
+    
+    // Pega a última mensagem enviada pelo usuário de forma segura
+    const lastUserMessage = history?.[history.length - 1]?.parts?.[0]?.text;
+
+    // Validação: Se não houver mensagem, retorna um erro.
+    if (!lastUserMessage) {
+      return res.status(400).json({ error: 'Nenhuma mensagem válida encontrada no histórico.' });
+    }
+
     const userPreferences = getPreferences();
     const personality = userPreferences.personality || 'Você é um assistente prestativo.';
 
-    // --- CORREÇÃO APLICADA AQUI ---
-    // Trocamos 'gemini-1.5-flash' por 'gemini-pro', que é o modelo padrão e mais estável para chat.
+    // Seleciona o modelo
     const model = genAI.getGenerativeModel({
-      model: "gemini-pro", 
+      model: "gemini-pro",
       systemInstruction: personality,
     });
 
-    const chat = model.startChat({
-      history: history,
-      generationConfig: {
-        maxOutputTokens: 500,
-      },
-    });
-
-    const lastMessage = history[history.length - 1].parts[0].text;
-    const result = await chat.sendMessage(lastMessage);
+    // --- MUDANÇA PRINCIPAL ---
+    // Em vez de usar startChat, usamos generateContent diretamente.
+    // É mais simples e direto para interações de pergunta e resposta.
+    const result = await model.generateContent(lastUserMessage);
     const response = await result.response;
     const text = response.text();
     
     res.json({ response: text });
 
   } catch (error) {
-    // Agora vamos logar o erro completo no servidor para facilitar futuras depurações
     console.error("Erro detalhado na rota /chat:", error); 
     res.status(500).json({ error: 'Ocorreu um erro interno ao se comunicar com a API do Gemini.' });
   }
 });
 
+// Rotas de preferências (permanecem as mesmas)
 app.get('/api/user/preferences', (req, res) => {
   res.json(getPreferences());
 });
