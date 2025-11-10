@@ -10,41 +10,55 @@ app.use(cors());
 app.use(express.json());
 
 if (!process.env.GEMINI_API_KEY) {
-  console.warn("AVISO: A variável de ambiente GEMINI_API_KEY não está definida.");
+  console.warn("AVISO: A variável de ambiente GEMINI_API_KEY não está definida. A rota /chat falhará.");
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "CHAVE_API_AUSENTE");
 
-// Rota de chat simplificada e mais robusta
 app.post('/chat', async (req, res) => {
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "CHAVE_API_AUSENTE") {
     return res.status(500).json({ error: 'Erro de configuração no servidor: A chave da API do Gemini (GEMINI_API_KEY) não foi definida.' });
   }
 
   try {
     const { history } = req.body;
-    
-    // Pega a última mensagem enviada pelo usuário de forma segura
-    const lastUserMessage = history?.[history.length - 1]?.parts?.[0]?.text;
 
-    // Validação: Se não houver mensagem, retorna um erro.
-    if (!lastUserMessage) {
-      return res.status(400).json({ error: 'Nenhuma mensagem válida encontrada no histórico.' });
+    if (!history || history.length === 0) {
+      return res.status(400).json({ error: 'Histórico de conversa está vazio ou ausente.' });
     }
 
-    const userPreferences = getPreferences();
-    const personality = userPreferences.personality || 'Você é um assistente prestativo.';
+    // BLINDAGEM DO BACKEND: Garante que o histórico sempre alterne entre 'user' e 'model'.
+    // Isso remove mensagens consecutivas do mesmo "role", que causam erro na API.
+    const filteredHistory = history.reduce((acc, current) => {
+      if (acc.length === 0 || acc[acc.length - 1].role !== current.role) {
+        // A API do Gemini espera 'user' e 'model', então garantimos que o 'role' seja um desses.
+        const validRole = current.role === 'bot' ? 'model' : current.role;
+        if (validRole === 'user' || validRole === 'model') {
+            acc.push({ ...current, role: validRole });
+        }
+      }
+      return acc;
+    }, []);
+    
+    if (filteredHistory.length === 0) {
+        return res.status(400).json({ error: 'Histórico de conversa inválido após filtragem.' });
+    }
 
-    // Seleciona o modelo
+    const lastUserMessage = filteredHistory[filteredHistory.length - 1].parts[0].text;
+    const userPreferences = getPreferences();
+    const personality = userPreferences.personality;
+
     const model = genAI.getGenerativeModel({
       model: "gemini-pro",
       systemInstruction: personality,
     });
 
-    // --- MUDANÇA PRINCIPAL ---
-    // Em vez de usar startChat, usamos generateContent diretamente.
-    // É mais simples e direto para interações de pergunta e resposta.
-    const result = await model.generateContent(lastUserMessage);
+    // Inicia o chat com o histórico anterior (sem a última mensagem do usuário)
+    const chat = model.startChat({
+        history: filteredHistory.slice(0, -1)
+    });
+    
+    const result = await chat.sendMessage(lastUserMessage);
     const response = await result.response;
     const text = response.text();
     
@@ -56,7 +70,6 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// Rotas de preferências (permanecem as mesmas)
 app.get('/api/user/preferences', (req, res) => {
   res.json(getPreferences());
 });
