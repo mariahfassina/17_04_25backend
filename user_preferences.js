@@ -1,66 +1,65 @@
 const fs = require('fs');
 const path = require('path');
 
-const PREFERENCES_FILE = path.join(__dirname, 'preferences.json');
-
-// Simulação de um ID de usuário logado (já que não há login real)
-const STATIC_USER_ID = "user_logged_in";
-
+// Define o caminho para o arquivo que irá armazenar as configurações
+const preferencesFilePath = path.join(__dirname, 'preferences.json');
 let userPreferences = {};
 
 /**
- * Carrega as preferências do arquivo JSON.
+ * Carrega as preferências do arquivo 'preferences.json'.
+ * Se o arquivo não existir, ele o cria com uma personalidade padrão.
  */
-function loadPreferences() {
-    try {
-        if (fs.existsSync(PREFERENCES_FILE)) {
-            const data = fs.readFileSync(PREFERENCES_FILE, 'utf8');
-            userPreferences = JSON.parse(data);
-        } else {
-            userPreferences = {};
-        }
-    } catch (error) {
-        console.error("Erro ao carregar preferências:", error);
-        userPreferences = {};
+const loadPreferences = () => {
+  try {
+    // Verifica se o arquivo de preferências já existe
+    if (fs.existsSync(preferencesFilePath)) {
+      const data = fs.readFileSync(preferencesFilePath, 'utf8');
+      userPreferences = JSON.parse(data);
+    } else {
+      // Se não existir, define um valor padrão e cria o arquivo
+      userPreferences = { personality: "Você é um assistente de IA prestativo e amigável." };
+      fs.writeFileSync(preferencesFilePath, JSON.stringify(userPreferences, null, 2), 'utf8');
     }
-}
+  } catch (error) {
+    console.error('Erro ao carregar o arquivo de preferências:', error);
+    // Em caso de erro na leitura, usa um valor padrão para não quebrar a aplicação
+    userPreferences = { personality: "Você é um assistente de IA prestativo e amigável." };
+  }
+};
 
 /**
- * Salva as preferências no arquivo JSON.
+ * Salva o objeto 'userPreferences' atual no arquivo 'preferences.json'.
  */
-function savePreferences() {
-    try {
-        fs.writeFileSync(PREFERENCES_FILE, JSON.stringify(userPreferences, null, 2), 'utf8');
-    } catch (error) {
-        console.error("Erro ao salvar preferências:", error);
-    }
-}
+const savePreferences = () => {
+  try {
+    // Escreve o objeto de preferências no arquivo, formatando o JSON para melhor leitura
+    fs.writeFileSync(preferencesFilePath, JSON.stringify(userPreferences, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Erro ao salvar o arquivo de preferências:', error);
+  }
+};
 
-// Carrega as preferências ao iniciar o módulo
+// Carrega as preferências assim que o módulo é iniciado
 loadPreferences();
 
-/**
- * Busca a instrução de sistema personalizada para o usuário.
- * @param {string} userId O ID do usuário.
- * @returns {string | undefined} A instrução personalizada ou undefined.
- */
-function getCustomInstruction(userId) {
-    return userPreferences[userId]?.systemInstruction;
-}
+// Retorna as preferências atualmente em memória
+const getPreferences = () => userPreferences;
 
 /**
- * Salva a instrução de sistema personalizada para o usuário e persiste no arquivo.
- * @param {string} userId O ID do usuário.
- * @param {string} instruction A nova instrução de sistema.
- * @returns {void}
+ * Atualiza as preferências com os novos dados e salva no arquivo.
+ * @param {object} newPreferences - O novo objeto de preferências.
+ * @returns {object} As preferências atualizadas.
  */
-function saveCustomInstruction(userId, instruction) {
-    userPreferences[userId] = { systemInstruction: instruction };
-    savePreferences(); // Persiste a alteração
-}
+const updatePreferences = (newPreferences) => {
+  // Mescla as preferências existentes com as novas
+  userPreferences = { ...userPreferences, ...newPreferences };
+  // Salva as alterações no arquivo para persistência
+  savePreferences();
+  return userPreferences;
+};
 
+// Exporta as funções para serem usadas em outros arquivos (como o server.js)
 module.exports = {
-    getCustomInstruction,
-    saveCustomInstruction,
-    STATIC_USER_ID
+  getPreferences,
+  updatePreferences,
 };
