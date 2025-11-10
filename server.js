@@ -69,13 +69,15 @@ app.post("/chat", async (req, res) => {
         
         // console.log("Instrução de Sistema Final:", finalSystemInstruction); // Para debug
         
-        const systemMessage = {
-            role: "user", // O Gemini usa 'user' para a instrução de sistema no histórico
-            parts: [{ text: finalSystemInstruction }]
-        };
-        // Simulação de resposta do Gemini, sem salvar histórico
-        const chat = model.startChat({ history: [systemMessage] }); // Inicia chat com a instrução de sistema correta
-        const result = await chat.sendMessage({ role: "user", parts: [{ text: prompt }] });
+        // CORREÇÃO: Passar a instrução de sistema via 'config'
+        const chat = model.startChat({
+            config: {
+                systemInstruction: finalSystemInstruction
+            }
+        });
+        
+        // CORREÇÃO: Enviar apenas o prompt, pois o Gemini SDK trata o resto
+        const result = await chat.sendMessage(prompt);
         const response = await result.response;
         const botResponse = response.text();
 
@@ -186,7 +188,5 @@ app.get("/api/admin/dashboard", authenticateAdmin, async (req, res) => {
 
 // Start Server
 app.listen(port, () => {
-    console.log(`Servidor backend rodando em http://localhost:${port}`);
+    console.log(`Servidor backend rodando em http://localhost:${port}` );
 });
-
-
