@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { findUserById, updateUserInstruction, getGlobalInstruction, LOGGED_IN_USER_ID } = require('./users'); // Importa a nova lógica de usuários
+const { findUserById, updateUserInstruction, getGlobalInstruction, LOGGED_IN_USER_ID } = require('./users');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15,9 +15,7 @@ if (!process.env.GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "CHAVE_API_AUSENTE");
 
-// Middleware de Autenticação Simples
 const authenticateUser = (req, res, next) => {
-    // Simulação de autenticação: Usa o ID fixo do arquivo users.js
     req.userId = LOGGED_IN_USER_ID; 
     const user = findUserById(req.userId);
 
@@ -28,7 +26,7 @@ const authenticateUser = (req, res, next) => {
     next();
 };
 
-app.post('/chat', authenticateUser, async (req, res) => { // Rota protegida
+app.post('/chat', authenticateUser, async (req, res) => {
   if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "CHAVE_API_AUSENTE") {
     return res.status(500).json({ error: 'Erro de configuração no servidor: A chave da API do Gemini (GEMINI_API_KEY) não foi definida.' });
   }
@@ -40,7 +38,6 @@ app.post('/chat', authenticateUser, async (req, res) => { // Rota protegida
       return res.status(400).json({ error: 'Histórico de conversa está vazio ou ausente.' });
     }
 
-    // Lógica de Personalidade Adaptativa
     let personality = req.user.systemInstruction;
     
     if (!personality || personality.trim() === "") {
@@ -51,10 +48,9 @@ app.post('/chat', authenticateUser, async (req, res) => { // Rota protegida
         personality = "Você é um assistente prestativo.";
     }
 
-    // BLINDAGEM DO BACKEND: Garante que o histórico sempre alterne entre 'user' e 'model'.
     const filteredHistory = history.reduce((acc, current) => {
       if (acc.length === 0 || acc[acc.length - 1].role !== current.role) {
-        const validRole = current.role === 'bot' ? 'model' : current.role;
+        const validRole = current.role === 'model' ? 'model' : current.role;
         if (validRole === 'user' || validRole === 'model') {
             acc.push({ ...current, role: validRole });
         }
@@ -70,7 +66,7 @@ app.post('/chat', authenticateUser, async (req, res) => { // Rota protegida
 
     const model = genAI.getGenerativeModel({
       model: "gemini-pro",
-      systemInstruction: personality, // Usa a personalidade decidida
+      systemInstruction: personality,
     });
 
     const chat = model.startChat({
@@ -89,12 +85,10 @@ app.post('/chat', authenticateUser, async (req, res) => { // Rota protegida
   }
 });
 
-// Endpoint para buscar as preferências do usuário logado (GET)
 app.get('/api/user/preferences', authenticateUser, (req, res) => {
     res.json({ systemInstruction: req.user.systemInstruction });
 });
 
-// Endpoint para atualizar as preferências do usuário logado (PUT)
 app.put('/api/user/preferences', authenticateUser, (req, res) => {
     const { newInstruction } = req.body;
 
@@ -114,9 +108,7 @@ app.put('/api/user/preferences', authenticateUser, (req, res) => {
     }
 });
 
-// Endpoint para buscar a instrução global (para visualização no frontend)
 app.get('/api/admin/system-instruction', (req, res) => {
-    // Simulação de proteção de admin
     if (req.headers['x-admin-password'] !== 'admin123') {
         return res.status(403).json({ error: 'Acesso negado. Credenciais de administrador ausentes ou inválidas.' });
     }
